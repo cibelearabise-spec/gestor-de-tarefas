@@ -246,6 +246,14 @@
     background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px; max-height:340px; overflow-y:auto; line-height:1.7;
   }
 
+  .storage-notice{
+    position:fixed; bottom:14px; right:14px; z-index:50;
+    background: var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:8px 14px; font-size:11.5px; font-weight:600; color:var(--ink-dim);
+    box-shadow: 0 6px 18px -8px rgba(50,51,56,0.25);
+    display:flex; align-items:center; gap:6px;
+  }
+
   @media (max-width: 760px){
     #app.active{ grid-template-columns: 1fr; }
     .sidebar{ display:none; }
@@ -381,6 +389,8 @@
   </div>
 </div>
 
+<div class="storage-notice">💾 Dados salvos apenas neste navegador</div>
+
 <!-- New task modal -->
 <div class="modal-overlay" id="task-modal">
   <div class="modal">
@@ -487,6 +497,30 @@
 
   function genId(){ return 'tk_' + Math.random().toString(36).slice(2,10); }
   function genItemId(){ return String(6800000000 + Math.floor(Math.random()*99999999)); }
+
+  const STORAGE_KEY = 'taskSwarmData';
+  function saveState(){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({groups, tasks}));
+    }catch(e){
+      console.warn('Não foi possível salvar no localStorage:', e);
+    }
+  }
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return false;
+      const data = JSON.parse(raw);
+      if(data && Array.isArray(data.groups) && Array.isArray(data.tasks)){
+        groups = data.groups;
+        tasks = data.tasks;
+        return true;
+      }
+    }catch(e){
+      console.warn('Não foi possível ler o localStorage:', e);
+    }
+    return false;
+  }
 
   const AGENTS = [
     {key:'planner', name:'Planner', verbs:['organizou o backlog em', 'reordenou prioridades em', 'realocou tarefas do']},
@@ -613,6 +647,7 @@
         const t = tasks.find(x=>x.id===id);
         t.status = sel.value;
         pushTicker('tracker', `marcou "${t.title}" como ${STATUS_LABEL[t.status].toLowerCase()}`);
+        saveState();
         renderAll();
       });
     });
@@ -622,6 +657,7 @@
         const t = tasks.find(x=>x.id===id);
         tasks = tasks.filter(x=>x.id!==id);
         pushTicker('guardian', `removeu "${t.title}" do board`);
+        saveState();
         renderAll();
       });
     });
@@ -684,6 +720,7 @@
     tasks.push(t);
     taskModal.classList.remove('active');
     pushTicker('planner', `adicionou "${t.title}" ao board`);
+    saveState();
     renderAll();
   });
 
@@ -736,10 +773,16 @@
 
   let tickInterval;
   function boot(){
+    const restored = loadState();
     renderAgents();
     renderSprintWindow();
     renderAll();
-    pushTicker('planner', `inicializou o workspace com ${tasks.length} tarefas`);
+    if(restored){
+      pushTicker('planner', `restaurou ${tasks.length} tarefas salvas neste navegador`);
+    } else {
+      pushTicker('planner', `inicializou o workspace com ${tasks.length} tarefas`);
+      saveState();
+    }
     pushTicker('analyst', `calculou a distribuição inicial de SP`);
     if(tickInterval) clearInterval(tickInterval);
     tickInterval = setInterval(agentTick, 5200);
